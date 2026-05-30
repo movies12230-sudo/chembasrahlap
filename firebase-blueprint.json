@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Formula": {
+      "title": "Formula",
+      "description": "A cosmetic formulation created by a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "ingredients": { "type": "array" },
+        "phLevel": { "type": "number" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["userId", "name", "ingredients", "phLevel", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with skin type and history.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "skinType": { "type": "string" },
+        "sensitivity": { "type": "boolean" },
+        "history": { "type": "array" }
+      },
+      "required": ["uid", "skinType"]
+    }
+  },
+  "firestore": {
+    "/formulas/{formulaId}": {
+      "schema": "Formula",
+      "description": "Formulas collection."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles collection."
+    }
+  }
+}

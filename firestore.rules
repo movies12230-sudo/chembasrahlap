@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helpers ---
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+
+    function isValidFormula(data) {
+      return data.userId is string && data.userId.size() <= 128
+          && data.name is string && data.name.size() <= 256
+          && data.ingredients is list && data.ingredients.size() <= 50
+          && data.phLevel is number && data.phLevel >= 0 && data.phLevel <= 14
+          && data.status is string && data.status in ['Draft', 'Review', 'Approved', 'Production']
+          && data.safetyScore is number && data.efficiencyScore is number
+          && data.createdAt is timestamp;
+    }
+
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() <= 128
+          && data.skinType is string && data.skinType.size() <= 50;
+    }
+
+    // --- Root ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Collections ---
+    match /formulas/{formulaId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() 
+                    && isValidId(formulaId)
+                    && isValidFormula(incoming())
+                    && incoming().userId == request.auth.uid
+                    && incoming().createdAt == request.time;
+      allow update: if isSignedIn()
+                    && isValidFormula(incoming())
+                    && resource.data.userId == request.auth.uid
+                    && incoming().userId == resource.data.userId
+                    && incoming().createdAt == resource.data.createdAt
+                    && incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn()
+                    && isValidId(userId)
+                    && isValidUserProfile(incoming())
+                    && incoming().uid == request.auth.uid
+                    && incoming().uid == userId;
+      allow update: if isSignedIn()
+                    && isValidUserProfile(incoming())
+                    && resource.data.uid == request.auth.uid
+                    && incoming().uid == resource.data.uid;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "مختبر البصرة التجميلي",
+  "description": "محاكي رقمي متطور لإنتاج المستحضرات التجميلية مع أدوات التحليل والمطابقة القياسية.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
