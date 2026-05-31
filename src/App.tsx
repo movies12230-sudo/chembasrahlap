@@ -8,7 +8,7 @@ import { Camera, ShieldCheck, Users, Beaker, Info, Timer, LogIn, Save, Database,
 import { products } from './data';
 import { Product, SkinType, Formula } from './types';
 import { auth, db } from './lib/firebase';
-import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, query, where, getDocs, serverTimestamp, orderBy, doc, updateDoc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import WorkflowManager from './components/WorkflowManager';
@@ -54,6 +54,7 @@ export default function App() {
 
 
   useEffect(() => {
+     getRedirectResult(auth);
      return onAuthStateChanged(auth, async (u) => {
          setUser(u);
          if (u) {
@@ -70,7 +71,7 @@ export default function App() {
   }, []);
 
   const login = async () => {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      await signInWithRedirect(auth, new GoogleAuthProvider());
   };
 
   const addToast = (message: string, isError: boolean = false) => {
