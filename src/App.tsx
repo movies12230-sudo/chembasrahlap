@@ -8,13 +8,14 @@ import { Camera, ShieldCheck, Users, Beaker, Info, Timer, LogIn, Save, Database,
 import { products } from './data';
 import { Product, SkinType, Formula } from './types';
 import { auth, db } from './lib/firebase';
-import { signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, query, where, getDocs, serverTimestamp, orderBy, doc, updateDoc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import WorkflowManager from './components/WorkflowManager';
 import ChemicalDashboard from './components/ChemicalDashboard';
 import IngredientGuide from './components/IngredientGuide';
 import SubscriptionModal from './components/SubscriptionModal';
+import AuthModal from './components/AuthModal';
 import AdminPanel from './components/AdminPanel';
 
 export default function App() {
@@ -51,10 +52,10 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
 
   useEffect(() => {
-     getRedirectResult(auth);
      return onAuthStateChanged(auth, async (u) => {
          setUser(u);
          if (u) {
@@ -70,8 +71,8 @@ export default function App() {
      });
   }, []);
 
-  const login = async () => {
-      await signInWithRedirect(auth, new GoogleAuthProvider());
+  const login = () => {
+      setShowAuthModal(true);
   };
 
   const addToast = (message: string, isError: boolean = false) => {
@@ -683,6 +684,7 @@ export default function App() {
       
       {showSubscriptionModal && <SubscriptionModal onClose={() => setShowSubscriptionModal(false)} />}
       {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 }
