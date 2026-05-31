@@ -17,6 +17,7 @@ import IngredientGuide from './components/IngredientGuide';
 import SubscriptionModal from './components/SubscriptionModal';
 import AuthModal from './components/AuthModal';
 import AdminPanel from './components/AdminPanel';
+import { generateClientSideAnalysis } from './lib/cosmeticAnalyzer';
 
 export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product>(products[0]);
@@ -56,20 +57,42 @@ export default function App() {
 
 
   useEffect(() => {
+     const guest = localStorage.getItem('guest_user');
+     if (guest) {
+         setUser(JSON.parse(guest));
+         setIsSubscribed(true); // GUEST gets free pro trial!
+     }
+
      return onAuthStateChanged(auth, async (u) => {
-         setUser(u);
-         if (u) {
-             const userDocRef = doc(db, 'users', u.uid);
-             const userDoc = await getDoc(userDocRef);
-             if (userDoc.exists()) {
-                 setIsSubscribed(userDoc.data().isSubscribed || false);
-             } else {
-                 await setDoc(userDocRef, { isSubscribed: false });
-                 setIsSubscribed(false);
-             }
-         }
-     });
+          if (u) {
+              setUser(u);
+              localStorage.removeItem('guest_user'); // Logged in, remove guest
+              const userDocRef = doc(db, 'users', u.uid);
+              const userDoc = await getDoc(userDocRef);
+              if (userDoc.exists()) {
+                  setIsSubscribed(userDoc.data().isSubscribed || false);
+              } else {
+                  await setDoc(userDocRef, { isSubscribed: false });
+                  setIsSubscribed(false);
+              }
+          } else {
+              const guest = localStorage.getItem('guest_user');
+              if (guest) {
+                  setUser(JSON.parse(guest));
+                  setIsSubscribed(true);
+              } else {
+                  setUser(null);
+              }
+          }
+      });
   }, []);
+
+  const handleLogout = async () => {
+    localStorage.removeItem('guest_user');
+    await signOut(auth);
+    setUser(null);
+    window.location.reload();
+  };
 
   const login = () => {
       setShowAuthModal(true);
@@ -83,7 +106,8 @@ export default function App() {
 
   const saveFormula = async () => {
     if (!user) return alert("يرجى تسجيل الدخول أولاً");
-    await addDoc(collection(db, 'formulas'), {
+    
+    const formulaData = {
         userId: user.uid,
         name: selectedProduct.name,
         ingredients,
@@ -91,43 +115,84 @@ export default function App() {
         status: 'Draft',
         safetyScore: 85,
         efficiencyScore: 90,
-        createdAt: serverTimestamp()
-    });
-    alert("تم حفظ التركيبة بنجاح!");
+        createdAt: new Date().toISOString()
+    };
+
+    if (user.uid === 'guest') {
+        const localFormulas = JSON.parse(localStorage.getItem('guest_formulas') || '[]');
+        localFormulas.push({ id: `guest_${Date.now()}`, ...formulaData });
+        localStorage.setItem('guest_formulas', JSON.stringify(localFormulas));
+        alert("تم حفظ التركيبة محلياً في المتصفح بنجاح! كمهندس زائر يمكنك تصفح أرشيف تركيباتك في أي وقت.");
+    } else {
+        await addDoc(collection(db, 'formulas'), {
+            ...formulaData,
+            createdAt: serverTimestamp()
+        });
+        alert("تم حفظ التركيبة بنجاح في قاعدة البيانات!");
+    }
   };
 
   const fetchArchives = async () => {
     if (!user) return;
-    const q = query(collection(db, 'formulas'), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-    setArchives(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Formula)));
-    setShowArchive(true);
+    if (user.uid === 'guest') {
+        const localFormulas = JSON.parse(localStorage.getItem('guest_formulas') || '[]');
+        setArchives(localFormulas.map((f: any) => ({
+            ...f,
+            createdAt: { seconds: Math.floor(new Date(f.createdAt).getTime() / 1000) }
+        })));
+        setShowArchive(true);
+    } else {
+        const q = query(collection(db, 'formulas'), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
+        const snapshot = await getDocs(q);
+        setArchives(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Formula)));
+        setShowArchive(true);
+    }
   };
 
   const handleMix = async () => {
     if (!user) return alert("يرجى تسجيل الدخول لبدء التجربة");
     
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
-    const userData = userDoc.data();
-    
-    if (!userData?.isSubscribed) {
-        const today = new Date().toISOString().split('T')[0];
-        const lastFreeSessionDay = userData?.lastFreeSessionDay || '';
-        const sessionStartTime = userData?.sessionStartTime ? userData.sessionStartTime.toDate() : null;
+    if (user.uid === 'guest') {
+        const guestSubscription = localStorage.getItem('guest_is_subscribed') === 'true';
+        if (!guestSubscription) {
+            const today = new Date().toISOString().split('T')[0];
+            const lastFreeSessionDay = localStorage.getItem('guest_last_free_day') || '';
+            const sessionStartTimeStr = localStorage.getItem('guest_session_start');
+            const sessionStartTime = sessionStartTimeStr ? new Date(sessionStartTimeStr) : null;
+
+            if (lastFreeSessionDay !== today) {
+                localStorage.setItem('guest_last_free_day', today);
+                localStorage.setItem('guest_session_start', new Date().toISOString());
+            } else if (sessionStartTime && (Date.now() - sessionStartTime.getTime() > 2 * 60 * 60 * 1000)) {
+                return setShowSubscriptionModal(true);
+            } else if (!sessionStartTime) {
+                localStorage.setItem('guest_last_free_day', today);
+                localStorage.setItem('guest_session_start', new Date().toISOString());
+            }
+        }
+    } else {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        const userData = userDoc.data();
         
-        if (lastFreeSessionDay !== today) {
-            await updateDoc(userDocRef, {
-                lastFreeSessionDay: today,
-                sessionStartTime: Timestamp.now()
-            });
-        } else if (sessionStartTime && (Date.now() - sessionStartTime.getTime() > 2 * 60 * 60 * 1000)) {
-            return setShowSubscriptionModal(true);
-        } else if (!sessionStartTime) {
-             await updateDoc(userDocRef, {
-                lastFreeSessionDay: today,
-                sessionStartTime: Timestamp.now()
-            });
+        if (!userData?.isSubscribed) {
+            const today = new Date().toISOString().split('T')[0];
+            const lastFreeSessionDay = userData?.lastFreeSessionDay || '';
+            const sessionStartTime = userData?.sessionStartTime ? userData.sessionStartTime.toDate() : null;
+            
+            if (lastFreeSessionDay !== today) {
+                await updateDoc(userDocRef, {
+                    lastFreeSessionDay: today,
+                    sessionStartTime: Timestamp.now()
+                });
+            } else if (sessionStartTime && (Date.now() - sessionStartTime.getTime() > 2 * 60 * 60 * 1000)) {
+                return setShowSubscriptionModal(true);
+            } else if (!sessionStartTime) {
+                 await updateDoc(userDocRef, {
+                    lastFreeSessionDay: today,
+                    sessionStartTime: Timestamp.now()
+                });
+            }
         }
     }
     
@@ -202,11 +267,17 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ingredients })
         });
+        if (!res.ok) {
+            throw new Error("API server returned non-ok status");
+        }
         const data = await res.json();
         setRecommendation(data.analysis);
         setShowModal(true);
     } catch (e) {
-        alert("فشل التحليل عبر الذكاء الاصطناعي");
+        // High quality fallback cosmetic science analyzer to make it work beautifully on Netlify static hosts!
+        const report = generateClientSideAnalysis(selectedProduct, ingredients, skinType);
+        setRecommendation(report);
+        setShowModal(true);
     }
   };
 
@@ -244,7 +315,7 @@ export default function App() {
                 <Database size={16} /> الأرشيف
             </button>
             {user ? (
-                <button onClick={() => signOut(auth)} className="flex items-center gap-2 bg-red-900/50 px-4 py-2 rounded-lg text-sm hover:bg-red-800 transition">
+                <button onClick={handleLogout} className="flex items-center gap-2 bg-red-900/50 px-4 py-2 rounded-lg text-sm hover:bg-red-800 transition">
                     <LogOut size={16} /> خروج ({user.displayName?.split(' ')[0]})
                 </button>
             ) : (

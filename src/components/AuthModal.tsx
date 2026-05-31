@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { auth } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -19,8 +19,24 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
       }
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      if (err.message && err.message.includes('auth/operation-not-allowed')) {
+        setError('طريقة التسجيل بالبريد غير مفعّلة في لوحة تحكم Firebase بعد. لتفعيلها، اذهب إلى: Firebase Console -> Authentication -> Sign-in methods -> وقم بتفعيل البريد وكلمة المرور (Email/Password). للبدء فوراً، يمكنك الضغط على "الدخول كزائر" بالأسفل.');
+      } else if (err.message && (err.message.includes('auth/user-not-found') || err.message.includes('auth/wrong-password') || err.message.includes('auth/invalid-credential'))) {
+        setError('خطأ: البريد الإلكتروني أو كلمة المرور غير صحيحة، أو الحساب غير موجود.');
+      } else {
+        setError(err.message || 'حدث خطأ أثناء الاتصال بالخادم.');
+      }
     }
+  };
+
+  const handleGuestSignIn = () => {
+    const guestUser = {
+      uid: 'guest',
+      displayName: 'مهندس زائر',
+      email: 'guest@basra-lab.com'
+    };
+    localStorage.setItem('guest_user', JSON.stringify(guestUser));
+    window.location.reload();
   };
 
   return (
@@ -52,7 +68,19 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
         <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-4 text-slate-400 text-xs underline">
           {isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب؟ سجل دخول'}
         </button>
-        <button onClick={onClose} className="w-full mt-2 text-slate-600 underline text-sm">إغلاق</button>
+        <div className="relative flex py-3 items-center">
+            <div className="flex-grow border-t border-slate-800"></div>
+            <span className="flex-shrink mx-4 text-slate-500 text-[10px]">أو تجربة فورية للتطبيق</span>
+            <div className="flex-grow border-t border-slate-800"></div>
+        </div>
+        <button 
+          onClick={handleGuestSignIn} 
+          type="button"
+          className="w-full bg-slate-850 hover:bg-slate-850/80 border border-slate-700 hover:border-slate-600 text-sky-400 text-xs py-3 rounded-lg font-bold"
+        >
+          🔑 الدخول السريع كمهندس زائر (بدون حساب)
+        </button>
+        <button onClick={onClose} className="w-full mt-4 text-slate-500 hover:text-slate-450 underline text-xs">إغلاق</button>
       </div>
     </div>
   );
